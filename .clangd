@@ -1,0 +1,8 @@
+﻿CompileFlags:
+  Add:
+    - -isystemD:/keil5/ARM/ARMCLANG/include
+    - -I../bsp/JY61P
+  Remove: []
+  CompilationDatabase: ./eide/build/empty
+Diagnostics:
+  UnusedIncludes: None

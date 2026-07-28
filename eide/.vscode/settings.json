@@ -1,0 +1,9 @@
+{
+    "clangd.arguments": [
+        "--compile-commands-dir=d:/Desktop/m0_project/0-empty/eide/build/empty",
+        "--header-insertion=never",
+        "--query-driver=D:/keil5/ARM/ARMCLANG/bin/*",
+        "-isystemD:/keil5/ARM/ARMCLANG/include",
+        "-isystemD:/keil5/ARM/ARMCLANG/include/libcxx"
+    ]
+}
