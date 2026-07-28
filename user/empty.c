@@ -37,13 +37,13 @@ int main(void)
     {
         printf("%d\r\n",menu_cursor);
         /*--------------- 菜单模式 ---------------*/
-        if (menu_start == 0)
+        if (menu_start == MODE_MENU)
         {
             menu_render();      /* 渲染主菜单页面 */
             menu_handle_keys(); /* 按键处理（光标移动 / 确认进入运行） */
         }
         /*--------------- 加载过渡 ---------------*/
-        else if (menu_start == 1)
+        else if (menu_start == MODE_LOADING)
         {
             loading_show();     /* 显示加载画面，延时后 menu_start → 2 */
         }

@@ -10,6 +10,7 @@
 #include "delay.h"
 #include "encoder.h"
 #include "jy61p.h"
+#include "menu.h"
 #include "oled.h"
 #include "pid.h"
 #include "tb6612.h"
@@ -21,7 +22,7 @@
  */
 
 extern uint8_t menu_cursor; /* 菜单光标/目标选择（由 menu 模块维护） */
-extern uint8_t menu_start;  /* 系统模式：0=菜单 1=加载 2=运行（由 menu 模块维护） */
+extern uint8_t menu_start;
 
 const jy61p_data_t *imu; /* IMU 姿态数据指针 */
 unsigned short gray[8];  /* 灰度传感器 8 通道原始值 */
@@ -92,7 +93,7 @@ void init(void)
 
     /* ---- 定时器 3 配置（偏航角 33° PID） ---- */
 
-    OLED_ShowString(0, 24, "wait for init...", 16, 1); /* OLED 显示等待提示 */
+    OLED_ShowString(0, 24, (u8 *)"wait for init...", 16, 1); /* OLED 显示等待提示 */
     OLED_Refresh();
 
     /* 自动检测 IMU 模块型号（延时 200ms 等待 JY61P 上电发送数据） */
@@ -135,23 +136,23 @@ void loading_show(void)
     switch (menu_cursor)
     {
     case 0:
-        OLED_ShowString(0, 24, "target1", 16, 1);
+        OLED_ShowString(0, 24, (u8 *)"target1", 16, 1);
         move_mode = GRAY_MODE;
         break;
     case 1:
-        OLED_ShowString(0, 24, "target2", 16, 1);
+        OLED_ShowString(0, 24, (u8 *)"target2", 16, 1);
         move_mode = GRAY_MODE;
         break;
     case 2:
-        OLED_ShowString(0, 24, "target3", 16, 1);
+        OLED_ShowString(0, 24, (u8 *)"target3", 16, 1);
         move_mode = GRAY_MODE;
         break;
     case 3:
-        OLED_ShowString(0, 24, "target4", 16, 1);
+        OLED_ShowString(0, 24, (u8 *)"target4", 16, 1);
         move_mode = YAW_MODE;
         break;
     default:
-        OLED_ShowString(0, 24, "Loading...", 16, 1);
+        OLED_ShowString(0, 24, (u8 *)"Loading...", 16, 1);
         move_mode = GRAY_MODE;
         break;
     }
@@ -160,7 +161,7 @@ void loading_show(void)
     NVIC_ClearPendingIRQ(encoder_INST_INT_IRQN); /* 清除定时器中断标志 */
     NVIC_EnableIRQ(encoder_INST_INT_IRQN);       /* 使能 NVIC 定时器中断 */
     DL_TimerG_startCounter(encoder_INST);        /* 启动 10ms 定时器 */
-    menu_start = 2;            /* 跳转到运行模式 */
+    menu_start = MODE_RUN;            /* 跳转到运行模式 */
 }
 
 /**
