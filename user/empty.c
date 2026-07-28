@@ -35,7 +35,7 @@ int main(void)
     init(); /* 系统初始化 */
     while (1)
     {
-        printf("%d\r\n",menu_cursor);
+        printf("%d,\r\n",menu_cursor);
         /*--------------- 菜单模式 ---------------*/
         if (menu_start == MODE_MENU)
         {
