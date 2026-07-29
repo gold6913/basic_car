@@ -14,7 +14,7 @@
 typedef enum {
     SPEED_MODE = 0,   /**< 纯速度模式 */
     GRAY_MODE,        /**< 灰度循迹模式 */
-    YAW_MODE,          /**< 偏航角控制模式 */
+    YAW_MODE,         /**< 偏航角控制模式 */
     STOP_MODE
 } speed_mode_t;
 

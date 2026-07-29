@@ -62,6 +62,11 @@ static uint8_t    t1_black_cnt   = 0;            /**< 连续检测到黑条的�
 static uint8_t    t1_white_cnt   = 0;            /**< 连续检测到白面的次数 */
 static uint8_t    stop_reverse_cnt = 0;           /**< 停止前反转计数器（10ms/拍） */
 
+/** target3 黑条检测状态机 */
+static t1_state_t t3_state       = T1_RUNNING;
+static uint8_t    t3_black_cnt   = 0;
+static uint8_t    t3_white_cnt   = 0;
+
 /** 黑条检测阈值：8 通道中有多少通道检测到黑线(0)才算黑条 */
 #define T1_BLACK_THRESHOLD  4
 /** 防抖确认次数（1 = 无消抖） */
@@ -69,9 +74,9 @@ static uint8_t    stop_reverse_cnt = 0;           /**< 停止前反转计数器�
 /** 离开确认次数（白面通道数阈值） */
 #define T1_WHITE_THRESHOLD  1
 /** 触发停车的黑条累计次数 */
-#define T1_STOP_COUNT       2
+#define T1_STOP_COUNT       1
 /** 停止前反转时长（20 × 10ms = 200ms） */
-#define STOP_REVERSE_TICKS  12
+#define STOP_REVERSE_TICKS  5
 /* ==================================================================================
  *  功能函数
  * ==================================================================================
@@ -88,9 +93,12 @@ void target_start(void)
 {
     switch (menu_cursor)
     {
-    /*==================== target1：两次黑条后进入 STOP_MODE ====================*/
+    /*==================== target1：一次黑条后进入 STOP_MODE（5s 后才开启检测） ====================*/
     case 0:
     {
+        /* 5 秒后才开启停止位检测 */
+        if (car_runtime_sec < 5) break;
+
         /* 检测连续 3 路为黑 */
         uint8_t strip_detected = 0;
         for (uint8_t i = 0; i <= 5; i++)
@@ -104,8 +112,11 @@ void target_start(void)
 
         switch (t1_state)
         {
-        /*---- 循迹中，检测黑条 ----*/
+        /*---- 状态一：循迹中，检测黑条 ----*/
         case T1_RUNNING:
+            /* 前 10 秒跑基准速度 15，之后降为 5 */
+            gray_base_speed = (car_runtime_sec < 10) ? 15.0f : 5.0f;
+
             if (strip_detected)
             {
                 if (++t1_black_cnt >= T1_DEBOUNCE_CNT)
@@ -127,8 +138,10 @@ void target_start(void)
             else { t1_black_cnt = 0; }
             break;
 
-        /*---- 等待离开黑条区域 ----*/
+        /*---- 状态二：离开黑条区域，基准速度 10 ----*/
         case T1_CLEAR:
+            gray_base_speed = 10.0f;
+
             if (!strip_detected)         /* 黑条特征消失 */
             {
                 if (++t1_white_cnt >= T1_DEBOUNCE_CNT)
@@ -140,18 +153,66 @@ void target_start(void)
             else { t1_white_cnt = 0; }
             break;
 
-        /*---- 已停车，保持停止 ----*/
+        /*---- 状态三：已停车，速度归零 ----*/
         case T1_DONE:
         default:
+            gray_base_speed = 0.0f;
             break;
         }
         break;
     }
 
-    /*==================== target2：停止态 ====================*/
+    /*==================== target2：基准速度 10，4.8s 后停车 ====================*/
     case 1:
-    move_mode = STOP_MODE;
+        if (car_runtime_sec >= 4.8f)
+            move_mode = STOP_MODE;
+        else
+            gray_base_speed = 10.0f;
+        break;
+
+    /*==================== target3：基准速度 8，带黑条检测停车（5s 后才开启检测） ====================*/
     case 2:
+    {
+        gray_base_speed = 8.0f;
+
+        /* 5 秒后才开启停止位检测 */
+        if (car_runtime_sec < 5) break;
+
+        /* 检测连续 3 路为黑 */
+        uint8_t strip_detected = 0;
+        for (uint8_t i = 0; i <= 5; i++)
+        {
+            if (gray[i] == 0 && gray[i+1] == 0 && gray[i+2] == 0)
+            {
+                strip_detected = 1;
+                break;
+            }
+        }
+
+        switch (t3_state)
+        {
+        case T1_RUNNING:
+            gray_base_speed = 8.0f;
+            if (strip_detected)
+            {
+                if (++t3_black_cnt >= T1_DEBOUNCE_CNT)
+                {
+                    t3_black_cnt = 0;
+                    t3_state = T1_DONE;
+                    stop_reverse_cnt = STOP_REVERSE_TICKS;
+                    move_mode = STOP_MODE;
+                }
+            }
+            else { t3_black_cnt = 0; }
+            break;
+
+        case T1_DONE:
+        default:
+            gray_base_speed = 0.0f;
+            break;
+        }
+        break;
+    }
 
     case 3:
     default:
@@ -233,7 +294,7 @@ void loading_show(void)
         break;
     case 1:
         OLED_ShowString(0, 24, (u8 *)"target2", 16, 1);
-        move_mode = STOP_MODE;
+        move_mode = GRAY_MODE;
         break;
     case 2:
         OLED_ShowString(0, 24, (u8 *)"target3", 16, 1);
@@ -337,7 +398,7 @@ static void speed_control_loop(PID_TypeDef *pid_L, PID_TypeDef *pid_R)
     motor_set(out_R, out_L, 1);
 }
 /** @brief 灰度循迹基准速度（左右轮共同的基础速度，脉冲/周期） */
-float gray_base_speed = 12.0f;
+float gray_base_speed = 15.0f;
 
 float gray_correction = 0.0f;   /**< 灰度 PID 修正量（供主函数打印） */
 float gray_target_L   = 0.0f;   /**< 灰度 PID 后左轮速度目标 */

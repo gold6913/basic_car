@@ -212,7 +212,7 @@ void OLED_refresh_INST_IRQHandler(void)
     DL_TimerA_clearInterruptStatus(OLED_refresh_INST, DL_TIMERA_INTERRUPT_ZERO_EVENT);
     refresh = 1;
 
-    if (menu_start == MODE_RUN)
+    if (menu_start == MODE_RUN && move_mode != STOP_MODE)
     {
         if (++car_tick >= 10)
         {
