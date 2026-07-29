@@ -175,7 +175,6 @@ void menu_switchTo(PageId page)
     if (page >= PAGE_COUNT) return;
 
     menu_currentPage = page;
-    menu_cursor = 0;
     OLED_Clear();
 }
 
