@@ -14,6 +14,9 @@ PageId  menu_currentPage = PAGE_MAIN;
 uint8_t menu_cursor      = 0;
 uint8_t menu_start       = 0;
 uint8_t refresh          = 0;
+uint32_t car_runtime_sec = 0;
+
+static uint8_t  car_tick = 0;   /* 100ms 节拍计数器，每 10 次 = 1 秒 */
 
 /*========================== 页面绘制 ==========================*/
 
@@ -48,7 +51,9 @@ static void drawSensor(void)
         OLED_ShowNum(40 + i * 10, 32, gray[i], 1, 16, 1);
     }
 
-    OLED_ShowString(112, 48, (u8 *)"P0", 16, 1);
+    OLED_ShowString(0, 48, (u8 *)"T:", 16, 1);
+    OLED_ShowNum(16, 48, car_runtime_sec, 5, 16, 1);
+    OLED_ShowString(60, 48, (u8 *)"s", 16, 1);
 }
 
 /**
@@ -62,7 +67,9 @@ static void drawMotor(void)
     OLED_ShowString(0, 16, (u8 *)"R_Speed:", 16, 1);
     OLED_ShowSNum(64, 16, encoder_right_speed, 4, 16, 1);
 
-    OLED_ShowString(112, 48, (u8 *)"P1", 16, 1);
+    OLED_ShowString(0, 48, (u8 *)"T:", 16, 1);
+    OLED_ShowNum(16, 48, car_runtime_sec, 5, 16, 1);
+    OLED_ShowString(60, 48, (u8 *)"s", 16, 1);
 }
 
 /*========================== 按键处理 ==========================*/
@@ -80,6 +87,8 @@ static void onKeyMain(uint8_t key)
     else if (key == KEY_CONFIRM)
     {
         menu_start = MODE_LOADING;
+        car_runtime_sec = 0;
+        car_tick = 0;
         OLED_Clear();
         menu_switchTo(PAGE_SENSOR);
     }
@@ -118,6 +127,8 @@ void menu_init(void)
 {
     menu_currentPage = PAGE_MAIN;
     menu_cursor = 0;
+    car_runtime_sec = 0;
+    car_tick = 0;
 }
 
 /**
@@ -193,10 +204,20 @@ void oled_updat(void)
 }
 
 /**
- * @brief  OLED 刷新定时器中断
+ * @brief  OLED 刷新定时器中断（100ms 周期）
+ * @note   同时维护小车运行时间计数器，每 10 次中断 = 1 秒
  */
 void OLED_refresh_INST_IRQHandler(void)
 {
     DL_TimerA_clearInterruptStatus(OLED_refresh_INST, DL_TIMERA_INTERRUPT_ZERO_EVENT);
     refresh = 1;
+
+    if (menu_start == MODE_RUN)
+    {
+        if (++car_tick >= 10)
+        {
+            car_tick = 0;
+            car_runtime_sec++;
+        }
+    }
 }

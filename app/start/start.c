@@ -25,9 +25,10 @@ extern uint8_t menu_cursor; /* 菜单光标/目标选择（由 menu 模块维护
 extern uint8_t menu_start;
 
 const jy61p_data_t *imu; /* IMU 姿态数据指针 */
-unsigned short gray[8];  /* 灰度传感器 8 通道原始值 */
+unsigned short gray[8];  /* 灰度传感器 8 通道二值化值(0/1) */
+unsigned short gray_analog[8]; /* 灰度传感器 8 通道原始 ADC 值 */
 unsigned short black[8] = {2888, 2888, 2888, 2888,
-                           2000, 2000, 2000, 2000}; /* 灰度校准基准值 */
+                           2888, 2000, 2000, 2000}; /* 灰度校准基准值 */
 
 PID_TypeDef pid_gray;    /* 灰度循迹 PID 控制器（外环） */
 PID_TypeDef pid_speed_L; /* 左轮速度 PID 控制器（内环） */
@@ -41,6 +42,36 @@ speed_mode_t move_mode = GRAY_MODE; /* 当前运动模式 */
 uint8_t move = 1;                    /* 运动使能标志：1=运动 0=停止 */
 char st1 = 'a';                      /* 阶段状态机：a=循迹段 b=等待转弯 c=转弯中 */
 uint8_t d = 0;
+
+/* ==================================================================================
+ *  模式一（target1）：起始/终止黑条检测状态机
+ * ==================================================================================
+ */
+
+/** 模式一状态 */
+typedef enum {
+    T1_RUNNING = 0,  /**< 循迹中，检测黑条并计数 */
+    T1_CLEAR   = 1,  /**< 黑条已计数，等待离开黑条区域 */
+    T1_DONE    = 2   /**< 计数满 2 次，电机停止 */
+} t1_state_t;
+
+
+static t1_state_t t1_state       = T1_RUNNING;  /**< 当前状态 */
+uint8_t    t1_strip_cnt   = 0;            /**< 已检测到的黑条次数 */
+static uint8_t    t1_black_cnt   = 0;            /**< 连续检测到黑条的次数 */
+static uint8_t    t1_white_cnt   = 0;            /**< 连续检测到白面的次数 */
+static uint8_t    stop_reverse_cnt = 0;           /**< 停止前反转计数器（10ms/拍） */
+
+/** 黑条检测阈值：8 通道中有多少通道检测到黑线(0)才算黑条 */
+#define T1_BLACK_THRESHOLD  4
+/** 防抖确认次数（1 = 无消抖） */
+#define T1_DEBOUNCE_CNT     1
+/** 离开确认次数（白面通道数阈值） */
+#define T1_WHITE_THRESHOLD  1
+/** 触发停车的黑条累计次数 */
+#define T1_STOP_COUNT       2
+/** 停止前反转时长（20 × 10ms = 200ms） */
+#define STOP_REVERSE_TICKS  12
 /* ==================================================================================
  *  功能函数
  * ==================================================================================
@@ -48,17 +79,78 @@ uint8_t d = 0;
 
 /**
  * @brief    目标启动调度函数
- * @note     根据 menu_cursor 选择运行模式：case 0 循迹 / case 1 多阶段 / case 2 灰度停车
+ * @note     根据 menu_cursor 选择运行模式：
+ *           case 0 (target1)：带起始/终止黑条检测的循迹
+ *           case 1~3：预留
  * @retval   无
  */
 void target_start(void)
 {
     switch (menu_cursor)
     {
+    /*==================== target1：两次黑条后进入 STOP_MODE ====================*/
     case 0:
+    {
+        /* 检测连续 3 路为黑 */
+        uint8_t strip_detected = 0;
+        for (uint8_t i = 0; i <= 5; i++)
+        {
+            if (gray[i] == 0 && gray[i+1] == 0 && gray[i+2] == 0)
+            {
+                strip_detected = 1;
+                break;
+            }
+        }
 
+        switch (t1_state)
+        {
+        /*---- 循迹中，检测黑条 ----*/
+        case T1_RUNNING:
+            if (strip_detected)
+            {
+                if (++t1_black_cnt >= T1_DEBOUNCE_CNT)
+                {
+                    t1_black_cnt = 0;
+                    t1_strip_cnt++;
+                    if (t1_strip_cnt >= T1_STOP_COUNT)
+                    {
+                        t1_state = T1_DONE;
+                        stop_reverse_cnt = STOP_REVERSE_TICKS; /* 先反转 0.5s */
+                        move_mode = STOP_MODE;
+                    }
+                    else
+                    {
+                        t1_state = T1_CLEAR;
+                    }
+                }
+            }
+            else { t1_black_cnt = 0; }
+            break;
+
+        /*---- 等待离开黑条区域 ----*/
+        case T1_CLEAR:
+            if (!strip_detected)         /* 黑条特征消失 */
+            {
+                if (++t1_white_cnt >= T1_DEBOUNCE_CNT)
+                {
+                    t1_white_cnt = 0;
+                    t1_state = T1_RUNNING;
+                }
+            }
+            else { t1_white_cnt = 0; }
+            break;
+
+        /*---- 已停车，保持停止 ----*/
+        case T1_DONE:
+        default:
+            break;
+        }
+        break;
+    }
+
+    /*==================== target2：停止态 ====================*/
     case 1:
-
+    move_mode = STOP_MODE;
     case 2:
 
     case 3:
@@ -117,9 +209,9 @@ void init(void)
     PID_SetTarget(&pid_speed_L, 0);
     PID_Init(&pid_speed_R, 4.0f, 2.0f, 0.0f, -1000.0f, 1000.0f);
     PID_SetTarget(&pid_speed_R, 0);
-    PID_Init(&pid_gray, 0.3f, 0.0000f,5.0f, -40.0f, 40.0f);
+    PID_Init(&pid_gray, 0.18f, 0.0009f, 3.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_gray, 0);
-    PID_Init(&pid_yaw, -0.3f, 0.00001f, -1.0f, -40.0f, 40.0f);
+    PID_Init(&pid_yaw, -0.3f, 0.00001f, -1.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_yaw, 90);
 }
 
@@ -141,7 +233,7 @@ void loading_show(void)
         break;
     case 1:
         OLED_ShowString(0, 24, (u8 *)"target2", 16, 1);
-        move_mode = GRAY_MODE;
+        move_mode = STOP_MODE;
         break;
     case 2:
         OLED_ShowString(0, 24, (u8 *)"target3", 16, 1);
@@ -173,6 +265,7 @@ void loading_show(void)
 void Collect_Data(void)
 {
     measure_gray = Get_Analog_value(gray, black);
+    Get_Analog_Raw(gray_analog);           /* 同时获取原始 ADC 值供调试 */
     measure_yaw = imu->angle_yaw;
     /*双180模式。用于正反跑*/
     // if (measure_yaw >= 90 && measure_yaw <= 180)
@@ -244,7 +337,11 @@ static void speed_control_loop(PID_TypeDef *pid_L, PID_TypeDef *pid_R)
     motor_set(out_R, out_L, 1);
 }
 /** @brief 灰度循迹基准速度（左右轮共同的基础速度，脉冲/周期） */
-float gray_base_speed = 10.0f;
+float gray_base_speed = 12.0f;
+
+float gray_correction = 0.0f;   /**< 灰度 PID 修正量（供主函数打印） */
+float gray_target_L   = 0.0f;   /**< 灰度 PID 后左轮速度目标 */
+float gray_target_R   = 0.0f;   /**< 灰度 PID 后右轮速度目标 */
 
 /**
  * @brief    灰度循迹转向控制循环
@@ -262,9 +359,14 @@ static void gray_steer_loop(PID_TypeDef *pid)
     /*==================== 2. PID 计算转向修正量 ====================*/
     float correction = PID_Compute(pid, (float)measure_gray);
 
+    /* 存储到全局变量，供主函数 printf 输出 */
+    gray_correction = correction;
+    gray_target_L   = gray_base_speed - correction;
+    gray_target_R   = gray_base_speed + correction;
+
     /*==================== 3. 差速分配：更新速度环目标 ====================*/
-    PID_SetTarget(&pid_speed_L, gray_base_speed - correction);
-    PID_SetTarget(&pid_speed_R, gray_base_speed + correction);
+    PID_SetTarget(&pid_speed_L, gray_target_L);
+    PID_SetTarget(&pid_speed_R, gray_target_R);
 }
 
 /**********************************************************
@@ -329,6 +431,18 @@ void encoder_INST_IRQHandler(void)
         speed_control_loop(&pid_speed_L, &pid_speed_R);
         break;
 
+    /*========================== 停止模式：先反转 0.5s 再停 ==========================*/
+    case STOP_MODE:
+        if (stop_reverse_cnt > 0)
+        {
+            stop_reverse_cnt--;
+            motor_set(-300, -300, 1);          /* 左右轮同时反转 */
+        }
+        else
+        {
+            motor_set(0, 0, 0);              /* 反转结束，彻底停止 */
+        }
+        break;
     /*========================== 默认：纯速度 ==========================*/
     default:
         speed_control_loop(&pid_speed_L, &pid_speed_R);

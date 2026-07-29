@@ -34,6 +34,7 @@ extern PageId  menu_currentPage;
 extern uint8_t menu_cursor;
 extern uint8_t menu_start;
 extern uint8_t refresh;
+extern uint32_t car_runtime_sec;
 
 void menu_init(void);
 void menu_render(void);

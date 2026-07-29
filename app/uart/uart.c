@@ -12,7 +12,7 @@
 #include "ti_msp_dl_config.h"
 
 /** printf重定向的目标串口，修改此宏即可切换printf输出端口 */
-#define PRINTF_PORT  UART_PORT_0
+#define PRINTF_PORT  UART_PORT_1
 
 /**
  * @brief  端口号 → UART外设实例映射表

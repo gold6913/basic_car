@@ -22,7 +22,7 @@
 #include "uart.h"                                /* 串口通信                    */
 #include "zdt_motor.h"                           /* 电机驱动                    */
 /*========================== 全局变量定义 ==========================*/
-
+extern uint8_t    t1_strip_cnt ;
 /*========================== 主函数 ==========================*/
 
 /**
@@ -35,7 +35,7 @@ int main(void)
     init(); /* 系统初始化 */
     while (1)
     {
-        printf("%d\r\n",menu_cursor);
+        printf("%d,\r\n",menu_cursor);
         /*--------------- 菜单模式 ---------------*/
         if (menu_start == MODE_MENU)
         {
@@ -56,5 +56,12 @@ int main(void)
             target_start();     /* 执行目标任务调度 */
         }
         oled_updat();
+        printf("A:%u,%u,%u,%u,%u,%u,%u,%u  D:%u,%u,%u,%u,%u,%u,%u,%u  S:%u\r\n",
+               gray_analog[0], gray_analog[1], gray_analog[2], gray_analog[3],
+               gray_analog[4], gray_analog[5], gray_analog[6], gray_analog[7],
+               gray[0], gray[1], gray[2], gray[3],
+               gray[4], gray[5], gray[6], gray[7],
+               t1_strip_cnt);
+        
     }
 }

@@ -66,6 +66,12 @@ extern "C" {
 int Get_Analog_value(unsigned short *result, unsigned short *threshold);
 
 /**
+ * @brief  仅采集 8 通道 ADC 均值（不做二值化），供调试输出
+ * @param  result 输出数组（8 元素），存入各通道 ADC 均值
+ */
+void Get_Analog_Raw(unsigned short *result);
+
+/**
  * @brief  将 ADC 原始值数组二值化为 0/1
  * @param  result 输入/输出数组（8 元素）
  * @param  black  阈值数组（8 元素）

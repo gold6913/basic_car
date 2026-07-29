@@ -96,6 +96,31 @@ int Get_Analog_value(unsigned short *result, unsigned short *threshold)
 }
 
 /**
+ * @brief  仅采集 8 通道 ADC 模拟量均值（不二值化），供调试/校准使用
+ * @param  result 输出数组（8 元素），存入各通道原始 ADC 均值
+ */
+void Get_Analog_Raw(unsigned short *result)
+{
+    unsigned char i, j;
+    unsigned int Anolag = 0;
+
+    for (i = 0; i < 8; i++) {
+        Switch_Address_0(!(i & 0x01));
+        Switch_Address_1(!(i & 0x02));
+        Switch_Address_2(!(i & 0x04));
+
+        delay_cycles(32000000 / 100000 * 10);
+
+        for (j = 0; j < 30; j++) {
+            Anolag += Get_adc_of_user();
+        }
+
+        result[7 - i] = Anolag / j;
+        Anolag = 0;
+    }
+}
+
+/**
  * @brief  将 ADC 原始值数组二值化为 0/1
  * @param  result 输入/输出数组（8 元素），输入为 ADC 均值，输出被覆盖为 0 或 1
  * @param  black  阈值数组（8 元素），每个通道独立的比较阈值
