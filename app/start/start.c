@@ -28,13 +28,13 @@ const jy61p_data_t *imu; /* IMU 姿态数据指针 */
 unsigned short gray[8];  /* 灰度传感器 8 通道二值化值(0/1) */
 unsigned short gray_analog[8]; /* 灰度传感器 8 通道原始 ADC 值 */
 unsigned short black[8] = {2888, 2888, 2888, 2888,
-                           2888, 2000, 2000, 2000}; /* 灰度校准基准值 */
+                           2888, 2888, 2000, 2000}; /* 灰度校准基准值 */
 
 PID_TypeDef pid_gray;    /* 灰度循迹 PID 控制器（外环） */
 PID_TypeDef pid_speed_L; /* 左轮速度 PID 控制器（内环） */
 PID_TypeDef pid_speed_R; /* 右轮速度 PID 控制器（内环） */
 PID_TypeDef pid_yaw;     /* 偏航角 PID 控制器 */
-PID_TypeDef pid_yaw33; /* 偏航角 PID 控制器（33° 目标） */
+PID_TypeDef pid_yaw33;   /* 偏航角 PID 控制器（33° 目标） */
 
 int measure_gray;                    /* 灰度偏差测量值（PID 输入） */
 float_t measure_yaw;                 /* 偏航角测量值（PID 输入） */
@@ -115,7 +115,7 @@ void target_start(void)
         /*---- 状态一：循迹中，检测黑条 ----*/
         case T1_RUNNING:
             /* 前 10 秒跑基准速度 15，之后降为 5 */
-            gray_base_speed = (car_runtime_sec < 10) ? 15.0f : 5.0f;
+            gray_base_speed = (car_runtime_sec < 14) ? 20.0f : 5.0f;
 
             if (strip_detected)
             {
@@ -164,10 +164,10 @@ void target_start(void)
 
     /*==================== target2：基准速度 10，4.8s 后停车 ====================*/
     case 1:
-        if (car_runtime_sec >= 4.8f)
+        if (car_runtime_sec >= 8.0f)
             move_mode = STOP_MODE;
         else
-            gray_base_speed = 10.0f;
+            gray_base_speed = 8.0f;
         break;
 
     /*==================== target3：基准速度 8，带黑条检测停车（5s 后才开启检测） ====================*/
