@@ -58,10 +58,11 @@ int main(void)
         oled_updat();
         if (move_mode != STOP_MODE)
         {
-            printf("D:%u,%u,%u,%u,%u,%u,%u,%u  L:%ld  R:%ld  \r\n",
+            printf("D:%u,%u,%u,%u,%u,%u,%u,%u  L:%ld  R:%ld  Y:%d  up:%d  IMU:%d\r\n",
                    gray[0], gray[1], gray[2], gray[3],
                    gray[4], gray[5], gray[6], gray[7],
-                   encoder_left_speed, encoder_right_speed
+                   encoder_left_speed, encoder_right_speed,
+                   (int)measure_yaw, imu->angle_updated, imu_model_detected
                    );
         }
         

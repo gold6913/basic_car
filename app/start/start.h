@@ -32,9 +32,10 @@ extern const jy61p_data_t *imu;       /* IMU 陀螺仪数据指针 */
 extern unsigned short gray[8];        /* 灰度传感器 8 通道二值化值(0/1) */
 extern unsigned short black[8];       /* 灰度校准基准值 */
 extern unsigned short gray_analog[8]; /* 灰度传感器 8 通道原始 ADC 值 */
-extern PID_TypeDef pid_gray;          /* 灰度巡线 PID 控制器（target2/3 用） */
-extern PID_TypeDef pid_gray_fast;     /* 灰度巡线 PID（target1 高速段 speed=20） */
-extern PID_TypeDef pid_gray_slow;     /* 灰度巡线 PID（target1 低速段 speed=5） */
+extern PID_TypeDef pid_gray;          /* 灰度巡线 PID 控制器（target2/3） */
+extern PID_TypeDef pid_gray_fast;     /* 灰度巡线 PID（高速段 speed>=20） */
+extern PID_TypeDef pid_gray_slow;     /* 灰度巡线 PID（低速段 speed<20） */
+extern PID_TypeDef pid_gray_t4;       /* 灰度巡线 PID（target4 专用） */
 extern PID_TypeDef pid_speed_L;       /* 左轮速度 PID 控制器 */
 extern PID_TypeDef pid_speed_R;       /* 右轮速度 PID 控制器 */
 extern PID_TypeDef pid_yaw;           /* 偏航角 PID 控制器 */
@@ -47,6 +48,7 @@ extern float yaw_base_speed;          /* 偏航角控制基准速度（脉冲/�
 extern float gray_correction;         /* 灰度 PID 修正量 */
 extern float gray_target_L;           /* 灰度 PID 后左轮速度目标 */
 extern float gray_target_R;           /* 灰度 PID 后右轮速度目标 */
+extern uint8_t imu_model_detected;    /* IMU 检测结果: 0=无 1=JY60 2=JY61P */
 
 /*========================== 函数声明 ==========================*/
 

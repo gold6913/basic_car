@@ -15,6 +15,7 @@
 #include "pid.h"
 #include "tb6612.h"
 #include "zdt_motor.h"
+#include <math.h>
 
 /* ==================================================================================
  *  全局变量
@@ -31,8 +32,9 @@ unsigned short black[8] = {2888, 2888, 2888, 2888,
                            2888, 2888, 2000, 2000}; /* 灰度校准基准值 */
 
 PID_TypeDef pid_gray;      /* 灰度循迹 PID（target2/3 用） */
-PID_TypeDef pid_gray_fast; /* 灰度循迹 PID（target1 高速段 speed=20） */
-PID_TypeDef pid_gray_slow; /* 灰度循迹 PID（target1 低速段 speed=5） */
+PID_TypeDef pid_gray_fast; /* 灰度循迹 PID（高速段 speed>=20） */
+PID_TypeDef pid_gray_slow; /* 灰度循迹 PID（低速段 speed<20） */
+PID_TypeDef pid_gray_t4;   /* 灰度循迹 PID（target4 专用） */
 PID_TypeDef pid_speed_L; /* 左轮速度 PID 控制器（内环） */
 PID_TypeDef pid_speed_R; /* 右轮速度 PID 控制器（内环） */
 PID_TypeDef pid_yaw;     /* 偏航角 PID 控制器 */
@@ -43,7 +45,7 @@ float_t measure_yaw;                 /* 偏航角测量值（PID 输入） */
 speed_mode_t move_mode = GRAY_MODE; /* 当前运动模式 */
 uint8_t move = 1;                    /* 运动使能标志：1=运动 0=停止 */
 char st1 = 'a';                      /* 阶段状态机：a=循迹段 b=等待转弯 c=转弯中 */
-uint8_t d = 0;
+uint8_t imu_model_detected = 0;       /* IMU 检测结果（供调试） */
 
 /* ==================================================================================
  *  模式一（target1）：起始/终止黑条检测状态机
@@ -68,6 +70,15 @@ static uint8_t    stop_reverse_cnt = 0;           /**< 停止前反转计数器�
 static t1_state_t t3_state       = T1_RUNNING;
 static uint8_t    t3_black_cnt   = 0;
 static uint8_t    t3_white_cnt   = 0;
+
+/* ========== 偏航角停车用 ========== */
+static float   t1_start_yaw   = 0;      /**< target1 起始偏航角（raw） */
+static uint8_t t1_yaw_wrapped = 0;      /**< target1 是否已越过 ±180° 边界 */
+static float   t2_start_yaw   = 0;      /**< target2 起始偏航角（mapped） */
+static uint8_t t2_yaw_inited  = 0;      /**< target2 起始角是否已记录 */
+static uint8_t stop_indicated = 0;      /**< 停止指示灯是否已触发 */
+static uint8_t t4_phase       = 0;      /**< target4 阶段: 0=高速22 1=中速12 2=低速5 */
+static uint8_t t4_peak_reached = 0;     /**< target4 是否已到达 90° 峰值 */
 
 /** 黑条检测阈值：8 通道中有多少通道检测到黑线(0)才算黑条 */
 #define T1_BLACK_THRESHOLD  4
@@ -117,7 +128,8 @@ void target_start(void)
         /*---- 状态一：循迹中，检测黑条 ----*/
         case T1_RUNNING:
             /* 前 10 秒跑基准速度 15，之后降为 5 */
-            gray_base_speed = (car_runtime_sec < 11) ? 20.0f : 5.0f;
+            gray_base_speed = (car_runtime_sec < 14) ? 15.0f : 5.0f;
+
 
             if (strip_detected)
             {
@@ -164,12 +176,20 @@ void target_start(void)
         break;
     }
 
-    /*==================== target2：基准速度 10，4.8s 后停车 ====================*/
+    /*==================== target2：偏航角偏移超 ±15° 或 8s 超时停车 ====================*/
     case 1:
-        if (car_runtime_sec >= 8.0f)
+    {
+        if (!t2_yaw_inited)
+        {
+            t2_start_yaw  = measure_yaw;
+            t2_yaw_inited = 1;
+        }
+        gray_base_speed = 12.0f;
+
+        float yaw_diff = measure_yaw - t2_start_yaw;
+        if (yaw_diff > 20.0f || yaw_diff < -20.0f || car_runtime_sec >= 8)
             move_mode = STOP_MODE;
-        else
-            gray_base_speed = 8.0f;
+    }
         break;
 
     /*==================== target3：基准速度 8，带黑条检测停车（5s 后才开启检测） ====================*/
@@ -216,7 +236,44 @@ void target_start(void)
         break;
     }
 
+    /*==================== target4：灰度循迹，时间分段降速 + 黑线停车 ====================*/
     case 3:
+    {
+        /* 全白丢线 → 停车（不反转） */
+        if (gray[0] && gray[1] && gray[2] && gray[3]
+            && gray[4] && gray[5] && gray[6] && gray[7])
+        {
+            stop_reverse_cnt = 0;
+            move_mode = STOP_MODE;
+            break;
+        }
+
+        /* <9s:22, 9s:12, >=10s:5+黑线 */
+        if (car_runtime_sec >= 11)
+        {
+            gray_base_speed = 8.0f;
+            if (car_runtime_sec >= 5)
+            {
+                uint8_t strip = 0;
+                for (uint8_t i = 0; i <= 5; i++)
+                {
+                    if (gray[i] == 0 && gray[i+1] == 0 && gray[i+2] == 0)
+                    { strip = 1; break; }
+                }
+                if (strip)
+                {
+                    stop_reverse_cnt = 0;
+                    move_mode = STOP_MODE;
+                }
+            }
+        }
+        else if (car_runtime_sec >= 9)
+            gray_base_speed = 12.0f;
+        else
+            gray_base_speed = 22.0f;
+    }
+        break;
+
     default:
         break;
     }
@@ -253,7 +310,8 @@ void init(void)
 
     /* 自动检测 IMU 模块型号（延时 200ms 等待 JY61P 上电发送数据） */
     delay_ms(200);
-    switch (jy61p_detect()) {
+    imu_model_detected = (uint8_t)jy61p_detect();
+    switch (imu_model_detected) {
     case JY61P_MODEL_JY61P:
         jy61p_reset_angle();            /* JY61P 在线 → 角度归零 */
         break;
@@ -272,14 +330,17 @@ void init(void)
     PID_SetTarget(&pid_speed_L, 0);
     PID_Init(&pid_speed_R, 4.0f, 2.0f, 0.0f, -1000.0f, 1000.0f);
     PID_SetTarget(&pid_speed_R, 0);
-    PID_Init(&pid_gray, 0.35f, 0.0000f, 8.0f, -50.0f, 50.0f);
+    PID_Init(&pid_gray, 0.18, 0.0000f, 3.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_gray, 0);
-    /* --- 灰度 PID（target1 高速段 speed=20） --- */
+    /* --- 灰度 PID（高速段 speed>=20） --- */
     PID_Init(&pid_gray_fast, 0.35f, 0.0000f, 8.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_gray_fast, 0);
-    /* --- 灰度 PID（target1 低速段 speed=5） --- */
+    /* --- 灰度 PID（低速段 speed<20） --- */
     PID_Init(&pid_gray_slow, 0.18, 0.0000f, 3.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_gray_slow, 0);
+    /* --- 灰度 PID（target4 专用） --- */
+    PID_Init(&pid_gray_t4, 0.42f, 0.0000f, 10.0f, -80.0f, 80.0f);
+    PID_SetTarget(&pid_gray_t4, 0);
     PID_Init(&pid_yaw, -0.3f, 0.00001f, -1.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_yaw, 90);
 }
@@ -310,7 +371,7 @@ void loading_show(void)
         break;
     case 3:
         OLED_ShowString(0, 24, (u8 *)"target4", 16, 1);
-        move_mode = YAW_MODE;
+        move_mode = GRAY_MODE;
         break;
     default:
         OLED_ShowString(0, 24, (u8 *)"Loading...", 16, 1);
@@ -491,10 +552,14 @@ void encoder_INST_IRQHandler(void)
     /*========================== 灰度循迹模式 ==========================*/
     case GRAY_MODE:
     {
-        /* target1 按速度分段选 PID，其他 target 沿用 pid_gray */
-        PID_TypeDef *gray_pid = &pid_gray;
-        if (menu_cursor == 0)
-            gray_pid = (car_runtime_sec < 10) ? &pid_gray_fast : &pid_gray_slow;
+        /* 按速度分 PID: >=22→t4, 18~21→高速, <18→低速 */
+        PID_TypeDef *gray_pid;
+        if (gray_base_speed >= 22.0f)
+            gray_pid = &pid_gray_t4;
+        else if (gray_base_speed >= 18.0f)
+            gray_pid = &pid_gray_fast;
+        else
+            gray_pid = &pid_gray_slow;
         gray_steer_loop(gray_pid);
         speed_control_loop(&pid_speed_L, &pid_speed_R);
     }
@@ -506,7 +571,7 @@ void encoder_INST_IRQHandler(void)
         speed_control_loop(&pid_speed_L, &pid_speed_R);
         break;
 
-    /*========================== 停止模式：先反转 0.5s 再停 ==========================*/
+    /*========================== 停止模式：先反转再停 ==========================*/
     case STOP_MODE:
         if (stop_reverse_cnt > 0)
         {
