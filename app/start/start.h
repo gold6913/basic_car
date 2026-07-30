@@ -32,7 +32,9 @@ extern const jy61p_data_t *imu;       /* IMU 陀螺仪数据指针 */
 extern unsigned short gray[8];        /* 灰度传感器 8 通道二值化值(0/1) */
 extern unsigned short black[8];       /* 灰度校准基准值 */
 extern unsigned short gray_analog[8]; /* 灰度传感器 8 通道原始 ADC 值 */
-extern PID_TypeDef pid_gray;          /* 灰度巡线 PID 控制器 */
+extern PID_TypeDef pid_gray;          /* 灰度巡线 PID 控制器（target2/3 用） */
+extern PID_TypeDef pid_gray_fast;     /* 灰度巡线 PID（target1 高速段 speed=20） */
+extern PID_TypeDef pid_gray_slow;     /* 灰度巡线 PID（target1 低速段 speed=5） */
 extern PID_TypeDef pid_speed_L;       /* 左轮速度 PID 控制器 */
 extern PID_TypeDef pid_speed_R;       /* 右轮速度 PID 控制器 */
 extern PID_TypeDef pid_yaw;           /* 偏航角 PID 控制器 */

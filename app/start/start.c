@@ -30,7 +30,9 @@ unsigned short gray_analog[8]; /* 灰度传感器 8 通道原始 ADC 值 */
 unsigned short black[8] = {2888, 2888, 2888, 2888,
                            2888, 2888, 2000, 2000}; /* 灰度校准基准值 */
 
-PID_TypeDef pid_gray;    /* 灰度循迹 PID 控制器（外环） */
+PID_TypeDef pid_gray;      /* 灰度循迹 PID（target2/3 用） */
+PID_TypeDef pid_gray_fast; /* 灰度循迹 PID（target1 高速段 speed=20） */
+PID_TypeDef pid_gray_slow; /* 灰度循迹 PID（target1 低速段 speed=5） */
 PID_TypeDef pid_speed_L; /* 左轮速度 PID 控制器（内环） */
 PID_TypeDef pid_speed_R; /* 右轮速度 PID 控制器（内环） */
 PID_TypeDef pid_yaw;     /* 偏航角 PID 控制器 */
@@ -115,7 +117,7 @@ void target_start(void)
         /*---- 状态一：循迹中，检测黑条 ----*/
         case T1_RUNNING:
             /* 前 10 秒跑基准速度 15，之后降为 5 */
-            gray_base_speed = (car_runtime_sec < 14) ? 20.0f : 5.0f;
+            gray_base_speed = (car_runtime_sec < 11) ? 20.0f : 5.0f;
 
             if (strip_detected)
             {
@@ -270,8 +272,14 @@ void init(void)
     PID_SetTarget(&pid_speed_L, 0);
     PID_Init(&pid_speed_R, 4.0f, 2.0f, 0.0f, -1000.0f, 1000.0f);
     PID_SetTarget(&pid_speed_R, 0);
-    PID_Init(&pid_gray, 0.18f, 0.0009f, 3.0f, -50.0f, 50.0f);
+    PID_Init(&pid_gray, 0.35f, 0.0000f, 8.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_gray, 0);
+    /* --- 灰度 PID（target1 高速段 speed=20） --- */
+    PID_Init(&pid_gray_fast, 0.35f, 0.0000f, 8.0f, -50.0f, 50.0f);
+    PID_SetTarget(&pid_gray_fast, 0);
+    /* --- 灰度 PID（target1 低速段 speed=5） --- */
+    PID_Init(&pid_gray_slow, 0.18, 0.0000f, 3.0f, -50.0f, 50.0f);
+    PID_SetTarget(&pid_gray_slow, 0);
     PID_Init(&pid_yaw, -0.3f, 0.00001f, -1.0f, -50.0f, 50.0f);
     PID_SetTarget(&pid_yaw, 90);
 }
@@ -482,8 +490,14 @@ void encoder_INST_IRQHandler(void)
 
     /*========================== 灰度循迹模式 ==========================*/
     case GRAY_MODE:
-        gray_steer_loop(&pid_gray);
+    {
+        /* target1 按速度分段选 PID，其他 target 沿用 pid_gray */
+        PID_TypeDef *gray_pid = &pid_gray;
+        if (menu_cursor == 0)
+            gray_pid = (car_runtime_sec < 10) ? &pid_gray_fast : &pid_gray_slow;
+        gray_steer_loop(gray_pid);
         speed_control_loop(&pid_speed_L, &pid_speed_R);
+    }
         break;
 
     /*========================== 偏航角控制模式 ==========================*/

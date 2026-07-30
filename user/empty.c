@@ -58,12 +58,11 @@ int main(void)
         oled_updat();
         if (move_mode != STOP_MODE)
         {
-            printf("A:%u,%u,%u,%u,%u,%u,%u,%u  D:%u,%u,%u,%u,%u,%u,%u,%u  S:%u\r\n",
-                   gray_analog[0], gray_analog[1], gray_analog[2], gray_analog[3],
-                   gray_analog[4], gray_analog[5], gray_analog[6], gray_analog[7],
+            printf("D:%u,%u,%u,%u,%u,%u,%u,%u  L:%ld  R:%ld  \r\n",
                    gray[0], gray[1], gray[2], gray[3],
                    gray[4], gray[5], gray[6], gray[7],
-                   t1_strip_cnt);
+                   encoder_left_speed, encoder_right_speed
+                   );
         }
         
     }
